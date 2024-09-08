@@ -1,6 +1,7 @@
 import { Client, LocalAuth } from "whatsapp-web.js";
 import { image as imageQr } from "qr-image";
 import LeadExternal from "../../domain/lead-external.repository";
+import fs from "fs";  // Importa explícitamente el módulo fs
 
 class WsTransporter extends Client implements LeadExternal {
   private status = false;
@@ -9,10 +10,13 @@ class WsTransporter extends Client implements LeadExternal {
     super({
       authStrategy: new LocalAuth(),
       puppeteer: {
-        headless: true,
+        headless: true,  // Mantener en modo headless
         args: [
+          "--no-sandbox",  // Estas opciones son importantes en entornos en la nube como Railway
           "--disable-setuid-sandbox",
-          "--unhandled-rejections=strict",
+          "--disable-dev-shm-usage",  // Mejora el uso de memoria compartida en contenedores
+          "--disable-gpu",  // Desactiva la GPU ya que no es necesaria
+          "--disable-software-rasterizer",  // Desactiva el rasterizador de software
         ],
       },
     });
@@ -31,12 +35,14 @@ class WsTransporter extends Client implements LeadExternal {
       console.log("LOGIN_FAIL");
     });
 
+    // Evento para generar el código QR
     this.on("qr", (qr) => {
-      console.log("Escanea el codigo QR que esta en la carepta tmp");
-      this.generateImage(qr);
+      console.log("Escanea el código QR que está en la carpeta tmp");
+      this.generateImage(qr);  // Generar imagen del QR y guardarla
     });
   }
 
+  // Enviar mensajes a través de WhatsApp
   async sendMsg(lead: { message: string; phone: string; imageUrl?: string }): Promise<any> {
     try {
       if (!this.status) return Promise.resolve({ error: "WAIT_LOGIN" });
@@ -57,11 +63,15 @@ class WsTransporter extends Client implements LeadExternal {
     return this.status;
   }
 
+  // Generar imagen del QR y guardarlo en la carpeta tmp
   private generateImage = (base64: string) => {
-    const path = `${process.cwd()}/tmp`;
+    const path = `${process.cwd()}/tmp`;  // Asegúrate de que tmp exista en Railway
+    if (!fs.existsSync(path)) {
+      fs.mkdirSync(path);  // Crear la carpeta tmp si no existe
+    }
     let qr_svg = imageQr(base64, { type: "svg", margin: 4 });
-    qr_svg.pipe(require("fs").createWriteStream(`${path}/qr.svg`));
-    console.log(`⚡ Recuerda que el QR se actualiza cada minuto ⚡'`);
+    qr_svg.pipe(fs.createWriteStream(`${path}/qr.svg`));
+    console.log(`⚡ Recuerda que el QR se actualiza cada minuto ⚡`);
     console.log(`⚡ Actualiza F5 el navegador para mantener el mejor QR⚡`);
   };
 }
